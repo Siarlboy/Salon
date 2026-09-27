@@ -282,6 +282,31 @@
     border: 1px solid var(--line);
     margin-top: 8px;
   }
+  .gallery-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 8px 0;
+  }
+  .gallery-thumb-wrap { position: relative; width: 64px; height: 64px; flex-shrink: 0; }
+  .gallery-thumb {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    border-radius: 14px;
+    border: 1px solid var(--line);
+  }
+  .gallery-thumb-del {
+    position: absolute; top: -6px; right: -6px;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: var(--red);
+    color: #fff;
+    border: none;
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
   .row-actions { display: flex; gap: 8px; flex-shrink: 0; }
   .icon-btn {
     background: none;
@@ -737,6 +762,7 @@ function dailyPhrase() {
 function rowAppointment(a) {
   const client = STATE.clients.find(c => c.id === a.clientId);
   const service = STATE.services.find(s => s.id === a.serviceId);
+  const photoCount = (a.images || []).length;
   return `
     <div class="row">
       <div class="row-main">
@@ -744,6 +770,7 @@ function rowAppointment(a) {
         <div class="row-sub">${esc(service ? service.name : (a.serviceName||''))}${a.notes ? ' · '+esc(a.notes) : ''}</div>
       </div>
       <div class="row-actions">
+        ${photoCount ? `<span class="pill violet">📷 ${photoCount}</span>` : ''}
         <button class="icon-btn" data-edit-appt="${a.id}">${icoEdit()}</button>
         <button class="icon-btn" data-del="appointments:${a.id}">${icoTrash()}</button>
       </div>
@@ -789,6 +816,7 @@ function viewClientas() {
           </div>
         </div>
         <div class="row-actions">
+          ${(c.images||[]).length ? `<span class="pill violet">📷 ${c.images.length}</span>` : ''}
           <button class="icon-btn" data-edit-client="${c.id}">${icoEdit()}</button>
           <button class="icon-btn" data-del="clients:${c.id}">${icoTrash()}</button>
         </div>
@@ -948,6 +976,7 @@ function formAppointment(existing) {
       <select id="f-service"><option value="">— Selecciona —</option>${serviceOptions(a.serviceId)}</select>
     </div>
     <div class="field"><label>Notas</label><textarea id="f-notes">${esc(a.notes||'')}</textarea></div>
+    ${galleryField('f-gallery', 'Fotos de referencia (opcional)', 'Las uñas que se van a hacer — puedes subir varias', a.images)}
     <div class="modal-actions">
       <button class="btn secondary" data-close>Cancelar</button>
       <button class="btn" id="saveAppt">${existing?'Guardar':'Crear cita'}</button>
@@ -965,6 +994,7 @@ function formClient(existing) {
       <div class="field"><label>Instagram (opcional)</label><input id="f-instagram" placeholder="usuario" value="${escAttr((c.instagram||'').replace('@',''))}"></div>
     </div>
     ${imageField(c.imageUrl)}
+    ${galleryField('f-gallery', 'Collage de trabajos anteriores (opcional)', 'Sube varias fotos de las uñas que le has hecho antes', c.images)}
     <div class="field"><label>Notas (preferencias, alergias, diseños que le gustan…)</label><textarea id="f-notes">${esc(c.notes||'')}</textarea></div>
     <div class="modal-actions">
       <button class="btn secondary" data-close>Cancelar</button>
@@ -995,6 +1025,53 @@ function handleImageFile(e) {
     img.style.display = 'block';
   };
   reader.readAsDataURL(file);
+}
+
+/* ---- Galería de varias fotos (collage) ---- */
+function galleryField(fieldId, label, hint, images) {
+  const imgs = images || [];
+  return `
+    <div class="field">
+      <label>${label}</label>
+      <div class="gallery-grid" id="${fieldId}-grid">${imgs.map((src,i)=>galleryThumb(fieldId,src,i)).join('')}</div>
+      <input type="file" accept="image/*" multiple id="${fieldId}-file" onchange="handleGalleryFiles(event, '${fieldId}')">
+      <input type="hidden" id="${fieldId}" value='${escAttr(JSON.stringify(imgs))}'>
+      <p style="font-size:11.5px; color:var(--ink-soft); margin:6px 0 0;">${hint}</p>
+    </div>`;
+}
+function galleryThumb(fieldId, src, i) {
+  return `<div class="gallery-thumb-wrap">
+    <img class="gallery-thumb" src="${escAttr(src)}">
+    <button type="button" class="gallery-thumb-del" onclick="removeGalleryImage('${fieldId}', ${i})">×</button>
+  </div>`;
+}
+function getGalleryImages(fieldId) {
+  try { return JSON.parse(document.getElementById(fieldId).value || '[]'); } catch (e) { return []; }
+}
+function setGalleryImages(fieldId, arr) {
+  document.getElementById(fieldId).value = JSON.stringify(arr);
+  document.getElementById(fieldId + '-grid').innerHTML = arr.map((src,i)=>galleryThumb(fieldId,src,i)).join('');
+}
+function handleGalleryFiles(e, fieldId) {
+  const files = Array.from(e.target.files || []);
+  if (!files.length) return;
+  const current = getGalleryImages(fieldId);
+  let pending = files.length;
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      current.push(reader.result);
+      pending--;
+      if (pending === 0) setGalleryImages(fieldId, current);
+    };
+    reader.readAsDataURL(file);
+  });
+  e.target.value = '';
+}
+function removeGalleryImage(fieldId, index) {
+  const current = getGalleryImages(fieldId);
+  current.splice(index, 1);
+  setGalleryImages(fieldId, current);
 }
 
 function formService(existing) {
@@ -1114,6 +1191,7 @@ function wireModalSave(kind, editId) {
         clientId: document.getElementById('f-client').value,
         serviceId: document.getElementById('f-service').value,
         notes: document.getElementById('f-notes').value.trim(),
+        images: getGalleryImages('f-gallery'),
       };
       if (kind === 'appt-edit') updateDoc('appointments', editId, data);
       else addDoc('appointments', data);
@@ -1129,6 +1207,7 @@ function wireModalSave(kind, editId) {
         phone: document.getElementById('f-phone').value.trim(),
         instagram: document.getElementById('f-instagram').value.trim().replace('@',''),
         imageUrl: document.getElementById('f-image').value.trim(),
+        images: getGalleryImages('f-gallery'),
         notes: document.getElementById('f-notes').value.trim(),
       };
       if (kind === 'client-edit') updateDoc('clients', editId, data);

@@ -123,27 +123,27 @@ app.put('/api/settings', async (req, res) => {
 --------------------------------------------------------- */
 app.get('/api/clients', async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT id::text AS id, name, phone, notes, instagram, image_url AS "imageUrl" FROM clients ORDER BY name`
+    `SELECT id::text AS id, name, phone, notes, instagram, image_url AS "imageUrl", images FROM clients ORDER BY name`
   );
   res.json(rows);
 });
 
 app.post('/api/clients', async (req, res) => {
-  const { name, phone, notes, instagram, imageUrl } = req.body;
+  const { name, phone, notes, instagram, imageUrl, images } = req.body;
   const { rows } = await pool.query(
-    `INSERT INTO clients (name, phone, notes, instagram, image_url) VALUES ($1,$2,$3,$4,$5)
-     RETURNING id::text AS id, name, phone, notes, instagram, image_url AS "imageUrl"`,
-    [name, phone || '', notes || '', instagram || '', imageUrl || '']
+    `INSERT INTO clients (name, phone, notes, instagram, image_url, images) VALUES ($1,$2,$3,$4,$5,$6::jsonb)
+     RETURNING id::text AS id, name, phone, notes, instagram, image_url AS "imageUrl", images`,
+    [name, phone || '', notes || '', instagram || '', imageUrl || '', JSON.stringify(images || [])]
   );
   res.status(201).json(rows[0]);
 });
 
 app.put('/api/clients/:id', async (req, res) => {
-  const { name, phone, notes, instagram, imageUrl } = req.body;
+  const { name, phone, notes, instagram, imageUrl, images } = req.body;
   const { rows } = await pool.query(
-    `UPDATE clients SET name=$1, phone=$2, notes=$3, instagram=$4, image_url=$5 WHERE id=$6
-     RETURNING id::text AS id, name, phone, notes, instagram, image_url AS "imageUrl"`,
-    [name, phone || '', notes || '', instagram || '', imageUrl || '', req.params.id]
+    `UPDATE clients SET name=$1, phone=$2, notes=$3, instagram=$4, image_url=$5, images=$6::jsonb WHERE id=$7
+     RETURNING id::text AS id, name, phone, notes, instagram, image_url AS "imageUrl", images`,
+    [name, phone || '', notes || '', instagram || '', imageUrl || '', JSON.stringify(images || []), req.params.id]
   );
   res.json(rows[0]);
 });
@@ -197,7 +197,8 @@ const APPT_SELECT = `
          time,
          COALESCE(client_id::text, '') AS "clientId",
          COALESCE(service_id::text, '') AS "serviceId",
-         notes
+         notes,
+         images
   FROM appointments`;
 
 app.get('/api/appointments', async (req, res) => {
@@ -206,21 +207,21 @@ app.get('/api/appointments', async (req, res) => {
 });
 
 app.post('/api/appointments', async (req, res) => {
-  const { date, time, clientId, serviceId, notes } = req.body;
+  const { date, time, clientId, serviceId, notes, images } = req.body;
   const { rows } = await pool.query(
-    `INSERT INTO appointments (date, time, client_id, service_id, notes)
-     VALUES ($1,$2,$3,$4,$5) RETURNING id`,
-    [date, time || '', nullIfEmpty(clientId), nullIfEmpty(serviceId), notes || '']
+    `INSERT INTO appointments (date, time, client_id, service_id, notes, images)
+     VALUES ($1,$2,$3,$4,$5,$6::jsonb) RETURNING id`,
+    [date, time || '', nullIfEmpty(clientId), nullIfEmpty(serviceId), notes || '', JSON.stringify(images || [])]
   );
   const full = await pool.query(`${APPT_SELECT} WHERE id=$1`, [rows[0].id]);
   res.status(201).json(full.rows[0]);
 });
 
 app.put('/api/appointments/:id', async (req, res) => {
-  const { date, time, clientId, serviceId, notes } = req.body;
+  const { date, time, clientId, serviceId, notes, images } = req.body;
   await pool.query(
-    `UPDATE appointments SET date=$1, time=$2, client_id=$3, service_id=$4, notes=$5 WHERE id=$6`,
-    [date, time || '', nullIfEmpty(clientId), nullIfEmpty(serviceId), notes || '', req.params.id]
+    `UPDATE appointments SET date=$1, time=$2, client_id=$3, service_id=$4, notes=$5, images=$6::jsonb WHERE id=$7`,
+    [date, time || '', nullIfEmpty(clientId), nullIfEmpty(serviceId), notes || '', JSON.stringify(images || []), req.params.id]
   );
   const full = await pool.query(`${APPT_SELECT} WHERE id=$1`, [req.params.id]);
   res.json(full.rows[0]);
@@ -296,15 +297,9 @@ app.delete('/api/transactions/:id', async (req, res) => {
 /* ---------------------------------------------------------
    Frontend estático
 --------------------------------------------------------- */
-// Al estar en Root Directory = salon-app, 'public' está directamente aquí
-const publicPath = path.join(__dirname, 'public');
-
-// Servir la carpeta estática
-app.use(express.static(publicPath));
-
-// Redirigir cualquier otra ruta no-API al index.html
+app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 app.get('*', (req, res) => {
-  res.sendFile(path.join(publicPath, 'index.html'));
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 const PORT = process.env.PORT || 3000;
