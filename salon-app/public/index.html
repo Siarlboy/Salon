@@ -181,6 +181,18 @@
     margin: 0 0 4px;
   }
   .page-desc { color: var(--ink-soft); font-size: 14px; margin: 0; }
+  .search-wrap { margin-bottom: 18px; }
+  .search-input {
+    width: 100%;
+    padding: 11px 16px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface-2);
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 14.5px;
+  }
+  .search-input:focus { outline: 2px solid var(--rose); outline-offset: 1px; }
   .btn {
     display: inline-flex;
     align-items: center;
@@ -799,14 +811,29 @@ function viewAgenda() {
 }
 
 /* ---------------- Clientas ---------------- */
+let clientSearchTerm = '';
+
 function viewClientas() {
-  const list = [...STATE.clients].sort((a,b)=> (a.name||'').localeCompare(b.name||''));
   return `
     <div class="page-head">
       <div><h1 class="page-title">Clientas</h1><p class="page-desc">Sus datos, notas y preferencias.</p></div>
       <button class="btn" data-open="client-new">${icoPlus()} Nueva clienta</button>
     </div>
-    ${list.length ? `<div class="list-card">${list.map(c => `
+    <div class="search-wrap">
+      <input type="text" id="clientSearch" class="search-input" placeholder="🔍 Buscar por nombre, teléfono o Instagram…" value="${escAttr(clientSearchTerm)}" oninput="onClientSearchInput(this.value)">
+    </div>
+    <div id="clientasListArea">${renderClientasList()}</div>
+  `;
+}
+
+function matchesClientSearch(c, term) {
+  return (c.name||'').toLowerCase().includes(term)
+    || (c.phone||'').toLowerCase().includes(term)
+    || (c.instagram||'').toLowerCase().includes(term);
+}
+
+function clientRowHtml(c) {
+  return `
       <div class="row">
         <div class="row-left">
           ${thumbHtml(c.imageUrl)}
@@ -820,9 +847,49 @@ function viewClientas() {
           <button class="icon-btn" data-edit-client="${c.id}">${icoEdit()}</button>
           <button class="icon-btn" data-del="clients:${c.id}">${icoTrash()}</button>
         </div>
-      </div>`).join('')}</div>`
-      : `<div class="list-card"><div class="empty">💗 Todavía no hay clientas.<br><button class="btn small" data-open="client-new">${icoPlus()} Añadir la primera</button></div></div>`}
-  `;
+      </div>`;
+}
+
+function renderClientasList() {
+  const term = clientSearchTerm.trim().toLowerCase();
+  const list = [...STATE.clients]
+    .filter(c => !term || matchesClientSearch(c, term))
+    .sort((a,b)=> (a.name||'').localeCompare(b.name||''));
+
+  if (list.length) return `<div class="list-card">${list.map(clientRowHtml).join('')}</div>`;
+  if (term) return `<div class="list-card"><div class="empty">🔍 No hay clientas que coincidan con "${esc(clientSearchTerm)}".</div></div>`;
+  return `<div class="list-card"><div class="empty">💗 Todavía no hay clientas.<br><button class="btn small" data-open="client-new">${icoPlus()} Añadir la primera</button></div></div>`;
+}
+
+function onClientSearchInput(value) {
+  clientSearchTerm = value;
+  const area = document.getElementById('clientasListArea');
+  area.innerHTML = renderClientasList();
+  wireClientasListHandlers();
+}
+
+function wireClientasListHandlers() {
+  const area = document.getElementById('clientasListArea');
+  if (!area) return;
+  area.querySelectorAll('[data-edit-client]').forEach(b => {
+    b.addEventListener('click', () => {
+      const c = STATE.clients.find(x => x.id === b.dataset.editClient);
+      openModal(formClient(c));
+      wireModalSave('client-edit', c.id);
+    });
+  });
+  area.querySelectorAll('[data-del]').forEach(b => {
+    b.addEventListener('click', () => {
+      const [col, id] = b.dataset.del.split(':');
+      deleteDoc(col, id);
+    });
+  });
+  area.querySelectorAll('[data-open="client-new"]').forEach(b => {
+    b.addEventListener('click', () => {
+      openModal(formClient());
+      wireModalSave('client-new');
+    });
+  });
 }
 
 /* ---------------- Servicios ---------------- */
