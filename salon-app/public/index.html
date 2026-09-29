@@ -571,7 +571,7 @@ async function apiSend(pathname, method, body) {
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   if (r.status === 401) { window.location.href = '/login.html'; throw new Error('No autorizado'); }
-  if (!r.ok) throw new Error(method + ' ' + pathname + ' failed');
+  if (!r.ok) throw new Error(method + ' ' + pathname + ' failed (HTTP ' + r.status + ')');
   if (r.status === 204) return null;
   return r.json();
 }
@@ -608,7 +608,7 @@ async function addDoc(col, data) {
   try {
     const created = await apiSend('/' + col, 'POST', data);
     STATE[col].push(created);
-  } catch (e) {}
+  } catch (e) { console.error('No se pudo guardar en ' + col + ':', e); }
   render();
 }
 async function updateDoc(col, id, data) {
@@ -616,14 +616,14 @@ async function updateDoc(col, id, data) {
     const updated = await apiSend('/' + col + '/' + id, 'PUT', data);
     const i = STATE[col].findIndex(x => x.id === id);
     if (i > -1) STATE[col][i] = updated;
-  } catch (e) {}
+  } catch (e) { console.error('No se pudo actualizar en ' + col + ':', e); }
   render();
 }
 async function deleteDoc(col, id) {
   try {
     await apiSend('/' + col + '/' + id, 'DELETE');
     STATE[col] = STATE[col].filter(x => x.id !== id);
-  } catch (e) {}
+  } catch (e) { console.error('No se pudo eliminar en ' + col + ':', e); }
   render();
 }
 

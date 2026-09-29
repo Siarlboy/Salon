@@ -10,7 +10,7 @@ const path = require('path');
 const app = express();
 app.set('trust proxy', 1); // necesario en Render para que las cookies "secure" funcionen
 app.use(cors({ credentials: true }));
-app.use(express.json());
+app.use(express.json({ limit: '20mb' }));
 app.use(session({
   secret: process.env.SESSION_SECRET || 'cambia-este-secreto',
   resave: false,
